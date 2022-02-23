@@ -1,0 +1,54 @@
+<html>
+<head>
+	<title>CP750 Vezérlő</title>
+	<meta charset="UTF-8">
+	<script src="/static/js/jquery.js"></script>
+</head>
+<body>
+	<h1 style="font-size: 60px;text-align: center;">CP750 Vezérlő</h1>
+	<h1>CP750 verzió: {{version}}</h1>
+	<h1>CP750 bemenet: {{input_mode}}</h1><button id="dig_1" onclick="input_change(this)">Digital 1</button><button id="dig_2" onclick="input_change(this)">Digital 2</button><button id="dig_3" onclick="input_change(this)">Digital 3</button><button id="dig_4" onclick="input_change(this)">Digital 4</button><button id="analog" onclick="input_change(this)">Multi-ch Analog</button><button id="mic" onclick="input_change(this)">Microphone</button><button id="non_sync" onclick="input_change(this)">Non-Sync</button>
+	<h1>CP750 hangerő: {{fader / 10}}</h1>
+	<div class="control control-volume-fader">
+		<input type="range" min="0" max="100" step="1" value="{{ fader }}" id="rangeInput" name="rangeInput" style="width: 230px;"><h2 id="rangeText" style="display: inline-block;" ></h2>
+	</div>
+	<h1>CP750 decode mode: {{decode_mode}}</h1>
+</body>
+<script>
+	function input_change(obj) {
+		$.ajax({ 
+			url: '/send', 
+			data: {'cmd': `cp750.sys.input_mode ${obj.id}`},
+			method: 'POST', 
+			success: function(data) { 
+				window.location.reload();
+			} 
+		});
+	}
+	$(function () {
+
+	// on page load, set the text of the label based the value of the range
+	$('#rangeText').text($('#rangeInput').val() / 10);
+
+	// setup an event handler to set the text when the range value is dragged (see event for input) or changed (see event for change)
+	$('#rangeInput').on('input change', function () {
+		$('#rangeText').text($(this).val() / 10);
+	});
+
+	$('#rangeInput').mouseup(function() {
+		console.log()
+		$.ajax({ 
+			url: '/send', 
+			data: {'cmd': `cp750.sys.fader ${$(this).val()}`},
+			method: 'POST', 
+			success: function(data) { 
+				window.location.reload();
+			} 
+		});
+    });
+
+	});
+
+
+</script>
+</html>
