@@ -4,21 +4,47 @@
 	<meta charset="UTF-8">
 	<script src="/static/js/jquery.js"></script>
 </head>
+<style>
+	.warn {
+		color: red;
+		animation: blinker 2s linear infinite;
+	}
+
+	@keyframes blinker {
+		50% {
+			opacity: 0;
+		}
+	}
+</style>
 <body>
 	<h1 style="font-size: 60px;text-align: center;">CP750 Vezérlő</h1>
-	<h1>CP750 verzió: {{version}}</h1>
-	<h1>CP750 bemenet: {{input_mode}}</h1><button id="dig_1" onclick="input_change(this)">Digital 1</button><button id="dig_2" onclick="input_change(this)">Digital 2</button><button id="dig_3" onclick="input_change(this)">Digital 3</button><button id="dig_4" onclick="input_change(this)">Digital 4</button><button id="analog" onclick="input_change(this)">Multi-ch Analog</button><button id="mic" onclick="input_change(this)">Microphone</button><button id="non_sync" onclick="input_change(this)">Non-Sync</button>
-	<h1>CP750 hangerő: {{fader / 10}}</h1>
-	<div class="control control-volume-fader">
-		<input type="range" min="0" max="100" step="1" value="{{ fader }}" id="rangeInput" name="rangeInput" style="width: 230px;"><h2 id="rangeText" style="display: inline-block;" ></h2>
+	<h1>Rendszer verziója: {{version}}</h1>
+	<h1>Bemeneti mód: {{input_mode}}</h1><button id="dig_1" onclick="input_change(this)">Digital 1</button><button id="dig_2" onclick="input_change(this)">Digital 2</button><button id="dig_3" onclick="input_change(this)">Digital 3</button><button id="dig_4" onclick="input_change(this)">Digital 4</button><button id="analog" onclick="input_change(this)">Multi-ch Analog</button><button id="mic" onclick="input_change(this)">Microphone</button><button id="non_sync" onclick="input_change(this)">Non-Sync</button><br>
+	<h1 style="display: inline-block;">Hangerő: </h1>
+	<div class="control control-volume-fader" style="display: inline-block;">
+		<input type="range" min="0" max="100" step="1" value="{{ fader }}" id="rangeInput" name="rangeInput" style="width: 350px;display: inline-block;"><h2 id="rangeText" style="display: inline-block;" ></h2>
 	</div>
-	<h1>CP750 decode mode: {{decode_mode}}</h1>
+	{% if dolbywarn == True %}
+		<h1 class="warn">FIGYELEM! A dekódolási mód Dolby 7.1-re van állítva. Ha 5.1-es a film, akkor a hang rossz hangszórókon fog szólni (hiányozni fog a hátsó csatorna)! Kérlek, ha a tartalom indokolja, alább válts át Dolby 5.1-re!</h1>
+	{% endif %}
+	<h1>CP750 decode mode: {{decode_mode}}</h1><button id="4_discrete_sur" onclick="decode_change(this)" style="display: inline-block;">Dolby 7.1</button><button id="lr_discrete" onclick="decode_change(this)" style="display: inline-block;">Dolby 5.1</button><br>
+	<h1 for="muted" style="display: inline-block;">Némítva? </h1><input type="checkbox" id="muted" name="muted" value="{{ muted }}" style="display: inline-block;width: 50px;height: 50px;top:10%;">
 </body>
 <script>
 	function input_change(obj) {
 		$.ajax({ 
 			url: '/send', 
 			data: {'cmd': `cp750.sys.input_mode ${obj.id}`},
+			method: 'POST', 
+			success: function(data) { 
+				window.location.reload();
+			} 
+		});
+	}
+	function decode_change(obj) {
+		$.ajax({ 
+			url: '/send', 
+			data: {'cmd': `cp750.sys.pcm_2_channel_decode_mode_1 ${obj.id}`},
 			method: 'POST', 
 			success: function(data) { 
 				window.location.reload();
@@ -41,14 +67,30 @@
 			url: '/send', 
 			data: {'cmd': `cp750.sys.fader ${$(this).val()}`},
 			method: 'POST', 
-			success: function(data) { 
-				window.location.reload();
-			} 
 		});
     });
 
 	});
+	if ("{{ muted }}" == 1) {
+		$('#muted').prop('checked', true);
+	} else {
+		$('#muted').prop('checked', false);
+	}
 
+	$('#muted').on('change', function () {
+		if ($('#muted').prop('checked'))
+			$.ajax({ 
+				url: '/send', 
+				data: {'cmd': `cp750.sys.mute 1`},
+				method: 'POST',
+			});
+		else
+			$.ajax({ 
+				url: '/send', 
+				data: {'cmd': `cp750.sys.mute 0`},
+				method: 'POST', 
+			});
+	});
 
 </script>
 </html>

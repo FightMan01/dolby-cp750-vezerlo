@@ -1,26 +1,14 @@
 from quart import Quart, render_template, request, abort
 import socket
 import time
-import asyncio
 
-def nonblocking_readline(f, timeout=250):
-	timeout = timeout + int(round(time.time() * 1000))
-	line = b""
-	while int(round(time.time() * 1000)) < timeout:
-		char = f.read(1)
-		if char is None:
-			time.sleep(0.01)
-			continue
-		line += char
-		if char == b"\n":
-			return line
-	raise IOError(0, 'Timeout')
+debug_mode = False
 
 class CP750Control():
 
     def __init__(self):
         self.port = 61408
-        self.destination = "cp750 ip címe" 
+        self.destination = "10.36.11.13" #CP750 IP címe
         self.socket = None
         self.socket_stream = None
 
@@ -41,9 +29,8 @@ class CP750Control():
         print(f"[Connection - INFO] ~> Csatlakozás a CP750-hez, itt: {self.destination}:{self.port}")
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(10)
             s.connect((self.destination, self.port))
-            s.settimeout(500)
+            s.settimeout(10)
             s.setblocking(False)
             self.socket_stream = s.makefile("rwb", 0)
             self.socket = s
@@ -70,13 +57,10 @@ class CP750Control():
         if not self.socket:
             self.connect()
         try:
-            result = ""
             self.socket_stream.write(command.encode('UTF-8') + b"\r\n")
-            line = nonblocking_readline(self.socket_stream).decode('UTF-8').strip()
-            while line:
-                result = result + line + "\n"
-                line = nonblocking_readline(self.socket_stream).decode('UTF-8').strip()
-            return result.strip()
+            time.sleep(0.05) # 50ms várakozási idő. Ez egy belső hálózaton bőven elégnek kell lennie.
+            res = self.socket_stream.read().decode('UTF-8').strip()
+            return res
         except:
             print(f"[Parancskezelő - HIBA] ~> Parancs '{command}' hibát jelzett.")
             return
@@ -87,12 +71,18 @@ app = Quart(__name__)
 
 @app.route('/')
 async def main():
-    version = cp750.send("cp750.sysinfo.version ?")
+    dolby51warn = False
+    if not debug_mode:
+        version = cp750.send("cp750.sysinfo.version ?")
+    else:
+        version = "cp750.sysinfo.version 1.2.3.8"
     if not version:
         return abort(500)
     version = version.split(' ')[1]
-    await asyncio.sleep(0.2)
-    input_mode = cp750.send("cp750.sys.input_mode ?")
+    if not debug_mode:
+        input_mode = cp750.send("cp750.sys.input_mode ?")
+    else:
+        input_mode = "cp750.sys.input_mode dig_1"
     if not input_mode:
         return abort(500)
     input_mode = input_mode.split(' ')[1]
@@ -110,18 +100,22 @@ async def main():
         input_mode = "Non-Sync"
     if input_mode == "mic":
         input_mode = "Microphone"
-    await asyncio.sleep(0.2)
-    fader = cp750.send("cp750.sys.fader ?")
+    if not debug_mode:
+        fader = cp750.send("cp750.sys.fader ?")
+    else:
+        fader = "cp750.sys.fader 55"
     if not fader:
         return abort(500)
     fader = float(fader.split(' ')[1])
-    await asyncio.sleep(0.2)
-    decode_mode = cp750.send("cp750.state.decode_mode ?")
+    if not debug_mode:
+        decode_mode = cp750.send("cp750.state.decode_mode ?")
+    else:
+        decode_mode = "cp750.state.decode_mode 4_discrete_sur"
     if not decode_mode:
         return abort(500)
     decode_mode = decode_mode.split(' ')[1]
     if decode_mode == "lr_discrete":
-        decode_mode = "Discrete"
+        decode_mode = "Discrete (aka Dolby 5.1)"
     if decode_mode == "auto":
         decode_mode = "Automatikus"
     if decode_mode == "invalid":
@@ -133,14 +127,27 @@ async def main():
     if decode_mode == "prologic_2":
         decode_mode = "Pro Logic II"
     if decode_mode == "4_discrete_sur":
-        decode_mode = "4 Discrete Surrounds"
-    return await render_template('index.html', version=version, input_mode=input_mode, fader=fader, decode_mode=decode_mode)
+        dolby51warn = True
+        decode_mode = "4 Discrete Surrounds (aka Dolby 7.1)"
+    if not debug_mode:
+        muted = cp750.send("cp750.sys.mute ?")
+    else:
+        muted = "cp750.sys.mute 1"
+    muted = int(muted.split(' ')[1])
+    return await render_template('index.html', version=version, input_mode=input_mode, fader=fader, decode_mode=decode_mode, muted=muted, dolbywarn=dolby51warn)
 
 @app.route('/send', methods=['POST'])
 async def send_cmd():
     data = await request.form
-    if data.get("cmd"):
-        resp = cp750.send(data.get("cmd"))
-    return resp
+    print(f"[HTTP - INFO] ~> Beérkezett parancs: {data.get('cmd')}")
+    if not debug_mode:
+        if data.get("cmd"):
+            resp = cp750.send(data.get("cmd"))
+        if resp:
+            return resp
+        else:
+            return abort(500)
+    else:
+        return data.get("cmd")
 
 app.run(host="0.0.0.0", port=5782)
